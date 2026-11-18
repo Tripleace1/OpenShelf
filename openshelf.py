@@ -118,7 +118,8 @@ def parse_opts(body):
     y1 = clamp_int(body.get("year_from"), 1900, year + 1, None) if body.get("year_from") else None
     y2 = clamp_int(body.get("year_to"), 1900, year + 1, None) if body.get("year_to") else None
     return {
-        "topic": (body.get("topic") or "").strip()[:200],
+        "topic": (body.get("topic") or "").strip()[:300],
+        "folder": (body.get("folder") or "").strip()[:80],
         "keywords": as_list(body.get("keywords"))[:20],
         "match": "all" if body.get("match") == "all" else "any",
         "exclude": as_list(body.get("exclude"))[:20],
@@ -161,11 +162,31 @@ def open_path(path):
         subprocess.Popen(["xdg-open", path])
 
 
+# ------------------------------------------------------------------ folders
+TITLE_FILE = "Project title.txt"
+
+
+def prepare_folder(label, title):
+    """Create (or reuse) the topic folder and store the full project title in it."""
+    folder = library().topic_dir(label)
+    if title:
+        path = os.path.join(folder, TITLE_FILE)
+        try:
+            with open(path, encoding="utf-8") as f:
+                same = f.read().strip() == title.strip()
+        except OSError:
+            same = False
+        if not same:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(title.strip() + "\n")
+    return folder
+
+
 # ------------------------------------------------------------------ download job
-def run_download(search_id, ids, fill, topic, ref_ids=()):
+def run_download(search_id, ids, fill, topic, ref_ids=(), title=""):
     lib = library()
     entry = SEARCHES.get(search_id)
-    folder = lib.topic_dir(topic)
+    folder = prepare_folder(topic, title)
     naming = SETTINGS.get("naming", "year_author_title")
     queue = [entry["papers"][i] for i in ids if i in entry["papers"]]
     target = len(queue)
@@ -267,7 +288,7 @@ def run_download(search_id, ids, fill, topic, ref_ids=()):
             for f in [ex.submit(work) for _ in range(n)]:
                 f.result()
         if done_papers:
-            refs.merge_and_write(folder, topic, done_papers)
+            refs.merge_and_write(folder, title or topic, done_papers)
             log("Reference list updated (BibTeX, RIS, CSV, APA, IEEE, Reading list.html).")
     except Exception as e:  # keep the UI alive whatever happens
         log(f"Unexpected error: {e}", "error")
@@ -371,7 +392,8 @@ class Handler(BaseHTTPRequestHandler):
         route = {"/api/search": self.api_search, "/api/more": self.api_more,
                  "/api/download": self.api_download, "/api/stop": self.api_stop,
                  "/api/references": self.api_references, "/api/settings": self.api_settings,
-                 "/api/open": self.api_open}.get(self.path)
+                 "/api/open": self.api_open,
+                 "/api/save-export": self.api_save_export}.get(self.path)
         if not route:
             return self.err(404, "not found")
         try:
@@ -398,7 +420,8 @@ class Handler(BaseHTTPRequestHandler):
                         "exact_shown": sum(1 for p in found if p.get("match") == "exact"),
                         "results": [public(annotate(p)) for p in found],
                         "budget": Budget.remaining_usd,
-                        "folder": os.path.join(library().root, folder_name(opts["topic"] or " ".join(opts["keywords"])))})
+                        "folder": os.path.join(library().root, folder_name(
+                            opts["folder"] or opts["topic"] or " ".join(opts["keywords"])))})
 
     def api_more(self, body):
         entry = SEARCHES.get(body.get("search_id"))
@@ -414,8 +437,13 @@ class Handler(BaseHTTPRequestHandler):
                         "budget": Budget.remaining_usd})
 
     def _topic(self, entry, body):
-        return (body.get("topic") or entry["opts"]["topic"] or
-                " ".join(entry["opts"]["keywords"]) or "Untitled topic").strip()
+        """The folder label: the short folder name if given, else the topic."""
+        return (str(body.get("folder") or "").strip()[:80] or entry["opts"]["folder"] or
+                entry["opts"]["topic"] or " ".join(entry["opts"]["keywords"]) or
+                "Untitled topic").strip()
+
+    def _title(self, entry):
+        return entry["opts"]["topic"] or " ".join(entry["opts"]["keywords"])
 
     def api_download(self, body):
         if JOB.get("running"):
@@ -429,7 +457,8 @@ class Handler(BaseHTTPRequestHandler):
         threading.Thread(target=run_download, daemon=True,
                          args=(body["search_id"], ids, bool(body.get("fill", True)),
                                self._topic(entry, body),
-                               [i for i in body.get("ref_ids") or [] if i in entry["papers"]][:MAX_PAPERS])).start()
+                               [i for i in body.get("ref_ids") or [] if i in entry["papers"]][:MAX_PAPERS],
+                               self._title(entry))).start()
         self.send(200, {"ok": True})
 
     def api_stop(self, body):
@@ -444,7 +473,7 @@ class Handler(BaseHTTPRequestHandler):
         papers = []
         lib = library()
         topic = self._topic(entry, body)
-        folder = lib.topic_dir(topic)
+        folder = prepare_folder(topic, self._title(entry))
         for i in ids:
             p = entry["papers"].get(i)
             if not p:
@@ -454,10 +483,26 @@ class Handler(BaseHTTPRequestHandler):
             if e:
                 rec["file"] = os.path.relpath(os.path.join(lib.root, e["file"]), folder)
             papers.append(rec)
-        merged = refs.merge_and_write(folder, topic, papers)
+        merged = refs.merge_and_write(folder, self._title(entry) or topic, papers)
         self.send(200, {"ok": True, "folder": folder, "added": len(papers),
                         "total": len(merged),
                         "files": [f for f, _ in refs.EXPORTERS.values()] + ["Reading list.html"]})
+
+    def api_save_export(self, body):
+        """Save one reference format straight into the topic folder (no browser dialog)."""
+        entry = SEARCHES.get(body.get("search_id"))
+        fmt = body.get("fmt")
+        if not entry or fmt not in refs.EXPORTERS:
+            return self.err(404, "Search expired - run it again.")
+        ids = body.get("ids") or []
+        papers = [entry["papers"][i] for i in ids if i in entry["papers"]] or list(entry["papers"].values())
+        topic = self._topic(entry, body)
+        folder = prepare_folder(topic, self._title(entry))
+        fname, fn = refs.EXPORTERS[fmt]
+        out = f"Selected {len(papers)} - {fname}"
+        with open(os.path.join(folder, out), "w", encoding="utf-8", newline="") as f:
+            f.write(fn(papers))
+        self.send(200, {"ok": True, "file": out, "folder": folder, "count": len(papers)})
 
     def api_settings(self, body):
         if JOB.get("running"):

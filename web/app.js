@@ -88,11 +88,13 @@ const setChecks = (id, vals) => vals && $$(`${id} input`).forEach(i => i.checked
 
 /* ------------------------------------------------------------ form */
 function folderHint() {
-  const t = $("#topic").value.trim();
+  const t = $("#folderName").value.trim() || $("#topic").value.trim();
   const name = t.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "…";
   $("#folderHint").innerHTML = `Saved in <code>${esc((state.cfg?.settings.papers_dir || "Papers"))}${navigator.platform.startsWith("Win") ? "\\" : "/"}${esc(name)}</code>`;
 }
 $("#topic").addEventListener("input", folderHint);
+$("#folderName").addEventListener("input", folderHint);
+$("#topic").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#form").requestSubmit(); } });
 $("#limit").addEventListener("input", e => $("#limitOut").textContent = e.target.value);
 $("#yearQuick").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
@@ -102,7 +104,7 @@ $("#yearQuick").addEventListener("click", e => {
 
 function readForm() {
   return {
-    mode: mode.get(), quality: $("#quality").value,
+    mode: mode.get(), quality: $("#quality").value, folder: $("#folderName").value.trim(),
     topic: $("#topic").value.trim(), keywords: kw.get(), match: match.get(), exclude: ex.get(),
     year_from: $("#yearFrom").value, year_to: $("#yearTo").value,
     access: access.get(), oa_status: checks("#oaStatus"),
@@ -116,6 +118,7 @@ function readForm() {
 function writeForm(f) {
   if (!f) return;
   mode.set(f.mode || "pdf"); $("#quality").value = f.quality || "any";
+  $("#folderName").value = f.folder || "";
   $("#topic").value = f.topic || ""; kw.set(f.keywords || []); ex.set(f.exclude || []);
   match.set(f.match || "any"); access.set(f.access || "oa");
   $("#yearFrom").value = f.year_from || ""; $("#yearTo").value = f.year_to || "";
@@ -137,6 +140,7 @@ $("#form").addEventListener("submit", async e => {
     const r = await api("/api/search", f);
     state.searchId = r.search_id; state.results = r.results; state.status = {};
     state.folder = r.folder; state.topic = f.topic || f.keywords.join(" ");
+    state.folderName = f.folder || state.topic;
     state.selected = new Set(r.results.filter(selectable).map(p => p.id));
     $("#resTitle").textContent = state.topic;
     $("#resMeta").textContent = r.close
@@ -234,7 +238,7 @@ $("#dlBtn").onclick = async () => {
   const refIds = [...state.selected].filter(i => !ids.includes(i));
   const skipped = refIds.length;
   try {
-    await api("/api/download", { search_id: state.searchId, ids, ref_ids: refIds, fill: $("#fill").checked, topic: state.topic });
+    await api("/api/download", { search_id: state.searchId, ids, ref_ids: refIds, fill: $("#fill").checked, topic: state.topic, folder: state.folderName });
     if (skipped) toast(`${skipped} selected paper(s) are subscription-only or already saved — they'll go in the reference list only.`);
     $("#job").hidden = false; $("#manual").hidden = true; $("#openListBtn").hidden = true;
     $("#stopBtn").hidden = false; $("#log").innerHTML = "";
@@ -264,7 +268,7 @@ function poll() {
     if (j.finished || !j.running) {
       clearInterval(state.polling); state.polling = null;
       state.results.forEach(p => {
-        if (state.status[p.id] === "saved") { p.in_library = { topic: state.topic }; state.selected.delete(p.id); }
+        if (state.status[p.id] === "saved") { p.in_library = { topic: state.folderName }; state.selected.delete(p.id); }
         if (state.status[p.id] === "failed") state.selected.delete(p.id);
       });
       renderList();
@@ -285,10 +289,10 @@ $("#openListBtn").onclick = () => openRel(folderOfTopic() + "/Reading list.html"
 $("#refsBtn").onclick = async () => {
   const ids = [...state.selected];
   try {
-    const r = await api("/api/references", { search_id: state.searchId, ids, topic: state.topic });
+    const r = await api("/api/references", { search_id: state.searchId, ids, topic: state.topic, folder: state.folderName });
     toast(`Saved ${r.added} references (${r.total} in this topic) as BibTeX, RIS, CSV, APA, IEEE and a reading list.`);
     $("#job").hidden = false; $("#stopBtn").hidden = true; $("#openListBtn").hidden = false;
-    $("#jobTitle").textContent = `Reference list saved — ${r.total} references in “${state.topic}”`;
+    $("#jobTitle").textContent = `Reference list saved — ${r.total} references in “${state.folderName}”`;
     $("#jobCounts").textContent = r.files.join(" · ");
     $("#jobBar").style.width = "100%"; $("#manual").hidden = true; $("#log").innerHTML = "";
   } catch (err) { toast(err.message, true); }
@@ -298,8 +302,10 @@ $("#exportBtn").onclick = e => { e.stopPropagation(); $("#exportMenu").classList
 document.addEventListener("click", () => $("#exportMenu").classList.remove("open"));
 $("#exportMenu").addEventListener("click", e => {
   const a = e.target.closest("a"); if (!a) return;
-  const ids = [...state.selected].join(",");
-  location.href = `/api/export?search_id=${encodeURIComponent(state.searchId)}&fmt=${a.dataset.fmt}&ids=${encodeURIComponent(ids)}`;
+  $("#exportMenu").classList.remove("open");
+  api("/api/save-export", { search_id: state.searchId, fmt: a.dataset.fmt, ids: [...state.selected], folder: state.folderName })
+    .then(r => toast(`Saved “${r.file}” in your ${state.folderName} folder.`))
+    .catch(err => toast(err.message, true));
 });
 
 /* ------------------------------------------------------------ header bits */
@@ -339,7 +345,7 @@ async function loadCollections() {
 $("#colGrid").addEventListener("click", e => {
   const o = e.target.closest("[data-open]"); if (o) return openRel(o.dataset.open);
   const a = e.target.closest("[data-again]");
-  if (a) { $("#topic").value = a.dataset.again; folderHint(); $(".tab[data-view=search]").click(); $("#topic").focus(); }
+  if (a) { $("#folderName").value = a.dataset.again; folderHint(); $(".tab[data-view=search]").click(); $("#topic").focus(); }
 });
 $("#openRoot").onclick = () => openRel("");
 

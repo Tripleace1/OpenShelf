@@ -48,7 +48,7 @@ After a search you can expand any title to read its abstract, untick papers you 
 
 * **Download PDFs.** This saves the open access papers you selected. If one can't be downloaded, OpenShelf can automatically try the next matching paper instead (the "Auto-replace" option).
 * **Save references only.** No PDFs are downloaded. You get the reference files listed below.
-* **Export.** Downloads a single reference file straight to your browser's Downloads folder.
+* **Save as.** Saves a single citation format for the papers you selected straight into the topic folder, with no browser Save dialog.
 
 ## Folders and file names
 

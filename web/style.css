@@ -77,8 +77,8 @@ small { color: var(--muted); font-weight: 400; margin-left: 4px; }
 .field { margin-bottom: 16px; }
 .field > label, .settings > label, .two label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-input, select { width: 100%; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; outline: none; }
-input:focus, select:focus, .chips-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+input, select, textarea { width: 100%; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; outline: none; }
+input:focus, select:focus, textarea:focus, .chips-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 input[type=checkbox] { width: auto; accent-color: var(--accent); margin: 0; }
 input[type=range] { padding: 0; border: 0; accent-color: var(--accent); height: 34px; box-shadow: none; }
 output { float: right; color: var(--accent); font-weight: 700; }
@@ -234,3 +234,5 @@ button.big { background: linear-gradient(100deg, var(--accent), var(--navy)); bo
   .item .right { grid-column: 2; text-align: left; }
   .two { grid-template-columns: 1fr; }
 }
+
+textarea { resize: vertical; min-height: 44px; line-height: 1.4; font-family: inherit; }

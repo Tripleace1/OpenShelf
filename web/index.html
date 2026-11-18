@@ -49,8 +49,14 @@
     </div>
 
     <div class="field">
-      <label for="topic">Topic <small>becomes the folder name</small></label>
-      <input id="topic" placeholder="e.g. UAV navigation in GNSS-denied environments">
+      <label for="topic">Project title / topic <small>what you're researching</small></label>
+      <textarea id="topic" rows="2" placeholder="e.g. Development of an embedded ML-based GNSS spoofing detection framework for autonomous UAV navigation"></textarea>
+      <div class="hint">Saved in the folder as <code>Project title.txt</code>.</div>
+    </div>
+
+    <div class="field">
+      <label for="folderName">Folder name <small>optional, keep it short</small></label>
+      <input id="folderName" maxlength="80" placeholder="e.g. GNSS Spoofing UAV">
       <div class="hint" id="folderHint">Saved in <code>Papers/…</code></div>
     </div>
 
@@ -210,7 +216,7 @@
       <label class="check pdf-only" title="If a paper can't be downloaded, try the next matching result instead"><input type="checkbox" id="fill" checked> Auto-replace failed downloads</label>
       <div class="spacer"></div>
       <div class="dropdown">
-        <button class="ghost" type="button" id="exportBtn">Export ▾</button>
+        <button class="ghost" type="button" id="exportBtn" title="Save one citation format into the topic folder">Save as ▾</button>
         <div class="menu" id="exportMenu">
           <a data-fmt="bib">BibTeX (.bib)</a><a data-fmt="ris">RIS (Zotero, Mendeley, EndNote)</a>
           <a data-fmt="csv">Spreadsheet (.csv)</a><a data-fmt="apa">APA 7 (.txt)</a><a data-fmt="ieee">IEEE (.txt)</a>
