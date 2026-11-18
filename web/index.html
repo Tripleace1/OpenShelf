@@ -27,6 +27,15 @@
   <!-- ======================= search form ======================= -->
   <form id="form" class="panel form" autocomplete="off">
     <div class="field">
+      <label>What do you need?</label>
+      <div class="seg mode" id="mode">
+        <button type="button" data-v="pdf" class="on">📄 Download PDFs</button>
+        <button type="button" data-v="refs">📚 Reference list only</button>
+      </div>
+      <div class="hint" id="modeHint">Downloads free, legal PDFs into your topic folder.</div>
+    </div>
+
+    <div class="field">
       <label for="topic">Topic <small>becomes the folder name</small></label>
       <input id="topic" placeholder="e.g. UAV navigation in GNSS-denied environments" required>
       <div class="hint" id="folderHint">Saved in <code>Papers/…</code></div>
@@ -71,6 +80,17 @@
         <label title="Open article in a subscription journal"><input type="checkbox" value="hybrid" checked> Hybrid</label>
         <label title="Free to read on the publisher site, no clear licence"><input type="checkbox" value="bronze" checked> Bronze</label>
       </div>
+    </div>
+
+    <div class="field">
+      <label for="quality">Journal quality</label>
+      <select id="quality">
+        <option value="any">Any journal or venue</option>
+        <option value="core">Established journals only (CWTS core list)</option>
+        <option value="high">High-impact journals (impact ≈ 4+)</option>
+        <option value="top">Top-tier journals (impact ≈ 8+)</option>
+      </select>
+      <div class="hint">Impact uses OpenAlex's 2-year mean citations per article, an open equivalent of the impact factor.</div>
     </div>
 
     <div class="field">
@@ -145,7 +165,7 @@
         </div>
         <div class="res-tools">
           <label class="check"><input type="checkbox" id="selAll" checked> Select all</label>
-          <label class="check"><input type="checkbox" id="onlyPdf"> Only with PDF link</label>
+          <label class="check pdf-only"><input type="checkbox" id="onlyPdf"> Only with PDF link</label>
         </div>
       </div>
       <ul class="list" id="list"></ul>
@@ -173,7 +193,7 @@
 
     <div class="actionbar" id="actionbar" hidden>
       <div class="sel-info"><b id="selCount">0</b> selected</div>
-      <label class="check" title="If a paper can't be downloaded, try the next matching result instead"><input type="checkbox" id="fill" checked> Auto-replace failed downloads</label>
+      <label class="check pdf-only" title="If a paper can't be downloaded, try the next matching result instead"><input type="checkbox" id="fill" checked> Auto-replace failed downloads</label>
       <div class="spacer"></div>
       <div class="dropdown">
         <button class="ghost" type="button" id="exportBtn">Export ▾</button>
@@ -183,7 +203,7 @@
         </div>
       </div>
       <button class="secondary" type="button" id="refsBtn">Save references only</button>
-      <button class="primary" type="button" id="dlBtn">Download PDFs</button>
+      <button class="primary pdf-only" type="button" id="dlBtn">Download PDFs</button>
     </div>
   </section>
 </main>

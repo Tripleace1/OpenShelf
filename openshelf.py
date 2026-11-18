@@ -129,6 +129,7 @@ def parse_opts(body):
         "doc_types": as_list(body.get("doc_types")),
         "venue_types": as_list(body.get("venue_types")),
         "publishers": as_list(body.get("publishers")),
+        "quality": body.get("quality") if body.get("quality") in ("core", "high", "top") else "any",
         "min_citations": clamp_int(body.get("min_citations"), 0, 10**6, 0),
         "sort": body.get("sort") or "relevance",
         "limit": clamp_int(body.get("limit"), 1, MAX_PAPERS, 25),

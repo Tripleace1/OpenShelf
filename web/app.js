@@ -68,6 +68,21 @@ const ACCESS_HINT = {
 const match = seg("#match");
 const access = seg("#access", v => { $("#accessHint").textContent = ACCESS_HINT[v]; $("#oaStatus").hidden = v !== "oa"; });
 
+const MODE_HINT = {
+  pdf: "Downloads free, legal PDFs into your topic folder.",
+  refs: "Builds a citation list from all journals — open access and paid. No PDFs are downloaded.",
+};
+const mode = seg("#mode", v => {
+  document.body.classList.toggle("refs-mode", v === "refs");
+  $("#modeHint").textContent = MODE_HINT[v];
+  $("#refsBtn").className = v === "refs" ? "primary" : "secondary";
+  $("#refsBtn").textContent = v === "refs" ? "Save reference list" : "Save references only";
+  if (!mode) return;                       // initial setup
+  if (v === "refs") { access.set("all"); if ($("#quality").value === "any") $("#quality").value = "high"; }
+  else { access.set("oa"); }
+  if (state.results.length) { state.selected = new Set(state.results.filter(selectable).map(p => p.id)); renderList(); }
+});
+
 const checks = id => $$(`${id} input:checked`).map(i => i.value);
 const setChecks = (id, vals) => vals && $$(`${id} input`).forEach(i => i.checked = vals.includes(i.value));
 
@@ -87,6 +102,7 @@ $("#yearQuick").addEventListener("click", e => {
 
 function readForm() {
   return {
+    mode: mode.get(), quality: $("#quality").value,
     topic: $("#topic").value.trim(), keywords: kw.get(), match: match.get(), exclude: ex.get(),
     year_from: $("#yearFrom").value, year_to: $("#yearTo").value,
     access: access.get(), oa_status: checks("#oaStatus"),
@@ -98,6 +114,7 @@ function readForm() {
 }
 function writeForm(f) {
   if (!f) return;
+  mode.set(f.mode || "pdf"); $("#quality").value = f.quality || "any";
   $("#topic").value = f.topic || ""; kw.set(f.keywords || []); ex.set(f.exclude || []);
   match.set(f.match || "any"); access.set(f.access || "oa");
   $("#yearFrom").value = f.year_from || ""; $("#yearTo").value = f.year_to || "";
@@ -144,7 +161,7 @@ $("#loadMore").onclick = async () => {
 };
 
 /* ------------------------------------------------------------ results */
-const selectable = p => !p.in_library;
+const selectable = p => mode.get() === "refs" || !p.in_library;
 const TYPE_LABEL = { article: "Article", review: "Review", preprint: "Preprint", "book-chapter": "Book chapter", dissertation: "Thesis" };
 const STATUS_LABEL = { saved: "✓ Saved", failed: "Open in browser", dupe: "Already saved", downloading: "Downloading" };
 

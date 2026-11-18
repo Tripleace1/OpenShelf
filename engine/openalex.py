@@ -44,7 +44,9 @@ DOC_TYPES = {
     "book-chapter": "book-chapter",
     "dissertation": "dissertation",
 }
-VENUE_TYPES = ["journal", "conference", "repository", "book-series"]
+QUALITY_IF = {"high": 4, "top": 8}     # minimum 2-year mean citedness (impact-factor-like)
+QUALITY_H = {"high": 60, "top": 120}   # minimum journal h-index
+VENUE_TYPES =["journal", "conference", "repository", "book-series"]
 SORTS = {
     "relevance": "relevance_score:desc",
     "cited": "cited_by_count:desc",
@@ -124,6 +126,16 @@ def build_filters(opts, source_only=None, publisher_ids=None):
     venues = [v for v in (opts.get("venue_types") or []) if v in VENUE_TYPES]
     if venues and len(venues) < len(VENUE_TYPES):
         f.append("primary_location.source.type:" + "|".join(venues))
+    # Journal quality. "core" = CWTS core sources (established, peer-reviewed
+    # international journals). 2yr_mean_citedness is OpenAlex's open equivalent
+    # of the journal impact factor.
+    quality = opts.get("quality", "any")
+    if quality in ("core", "high", "top"):
+        f.append("primary_location.source.is_core:true")
+    if quality in QUALITY_IF:
+        f.append(f"primary_location.source.summary_stats.2yr_mean_citedness:>{QUALITY_IF[quality]}")
+        # h-index floor filters out tiny/new journals whose citation average is noisy
+        f.append(f"primary_location.source.summary_stats.h_index:>{QUALITY_H[quality]}")
     if opts.get("min_citations"):
         f.append(f"cited_by_count:>{int(opts['min_citations']) - 1}")
     if opts.get("language"):

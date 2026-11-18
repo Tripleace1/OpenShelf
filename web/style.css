@@ -68,6 +68,9 @@ output { float: right; color: var(--accent); font-weight: 700; }
 .seg button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 6px 4px; border-radius: 7px; font: inherit; font-size: 13px; cursor: pointer; }
 .seg button.on { background: var(--panel); color: var(--ink); font-weight: 600; box-shadow: var(--shadow); }
 .seg.mini { margin-top: 8px; }
+.seg.mode button { padding: 9px 4px; font-size: 13.5px; }
+.seg.mode button.on { background: var(--accent); color: var(--accent-ink); }
+body.refs-mode .pdf-only { display: none !important; }
 .seg.mini button { font-size: 12px; padding: 4px; }
 .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; }
 .checks label, .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; user-select: none; }

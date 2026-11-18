@@ -32,6 +32,8 @@ Your browser opens `http://127.0.0.1:8765`. Keep the small terminal window open 
 
 | Option | What it does |
 |---|---|
+| **Mode** | **Download PDFs** (free, legal copies), or **Reference list only**, which lists papers from any journal, open access *and* paid, and downloads no PDFs. |
+| **Journal quality** | Any venue, **Established** journals (the CWTS core list), **High-impact** (about 4+) or **Top-tier** (about 8+). Impact is OpenAlex's 2-year mean citations per article, an open equivalent of the impact factor. |
 | **Topic** | Your research area. It is also the **folder name**. |
 | **Keywords** | Extra terms. Choose **Match any** (broader) or **Match all** (stricter). |
 | **Publication years** | From and to, with quick buttons (last 2, 5 or 10 years). |
