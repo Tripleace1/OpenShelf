@@ -20,6 +20,7 @@ import threading
 import time
 import urllib.parse
 import uuid
+import zipfile
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -36,7 +37,7 @@ from engine.openalex import (PUBLISHERS, OA_STATUSES, Budget, Search,  # noqa: E
                              SearchError)
 
 VERSION = "1.0"
-MAX_PAPERS = 100
+MAX_PAPERS = 10000          # safety ceiling only; there is no practical cap
 WEB = os.path.join(HERE, "web")
 SETTINGS_FILE = os.path.join(HERE, "settings.json")
 DEFAULT_SETTINGS = {
@@ -182,8 +183,26 @@ def prepare_folder(label, title):
     return folder
 
 
+def make_zip(folder):
+    """Bundle the folder's PDFs and reference files into one ZIP inside the folder."""
+    name = os.path.basename(os.path.normpath(folder)) + " - papers.zip"
+    path = os.path.join(folder, name)
+    tmp = path + ".tmp"
+    count = 0
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+        for f in sorted(os.listdir(folder)):
+            full = os.path.join(folder, f)
+            if (not os.path.isfile(full) or f.lower().endswith((".zip", ".tmp"))
+                    or f == "references.json"):
+                continue
+            z.write(full, f)
+            count += f.lower().endswith(".pdf")
+    os.replace(tmp, path)
+    return name, count
+
+
 # ------------------------------------------------------------------ download job
-def run_download(search_id, ids, fill, topic, ref_ids=(), title=""):
+def run_download(search_id, ids, fill, topic, ref_ids=(), title="", want_zip=False):
     lib = library()
     entry = SEARCHES.get(search_id)
     folder = prepare_folder(topic, title)
@@ -290,6 +309,11 @@ def run_download(search_id, ids, fill, topic, ref_ids=(), title=""):
         if done_papers:
             refs.merge_and_write(folder, title or topic, done_papers)
             log("Reference list updated (BibTeX, RIS, CSV, APA, IEEE, Reading list.html).")
+        if want_zip and not JOB["stop"]:
+            zname, zcount = make_zip(folder)
+            with STATE_LOCK:
+                JOB["zip"] = zname
+            log(f"Created {zname} ({zcount} PDFs plus reference files).", "ok")
     except Exception as e:  # keep the UI alive whatever happens
         log(f"Unexpected error: {e}", "error")
 
@@ -393,7 +417,7 @@ class Handler(BaseHTTPRequestHandler):
                  "/api/download": self.api_download, "/api/stop": self.api_stop,
                  "/api/references": self.api_references, "/api/settings": self.api_settings,
                  "/api/open": self.api_open,
-                 "/api/save-export": self.api_save_export}.get(self.path)
+                 "/api/save-export": self.api_save_export, "/api/zip": self.api_zip}.get(self.path)
         if not route:
             return self.err(404, "not found")
         try:
@@ -429,8 +453,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.err(404, "Search expired - run it again.")
         room = MAX_PAPERS - len(entry["papers"])
         if room <= 0:
-            return self.send(200, {"results": [], "note": f"The maximum is {MAX_PAPERS} papers per search."})
-        found = entry["search"].next_batch(min(room, clamp_int(body.get("n"), 1, 100, 25)))
+            return self.send(200, {"results": [], "note": "No more results for this search."})
+        found = entry["search"].next_batch(min(room, clamp_int(body.get("n"), 1, 1000, 25)))
         for p in found:
             entry["papers"][p["id"]] = p
         self.send(200, {"results": [public(annotate(p)) for p in found],
@@ -458,7 +482,7 @@ class Handler(BaseHTTPRequestHandler):
                          args=(body["search_id"], ids, bool(body.get("fill", True)),
                                self._topic(entry, body),
                                [i for i in body.get("ref_ids") or [] if i in entry["papers"]][:MAX_PAPERS],
-                               self._title(entry))).start()
+                               self._title(entry), bool(body.get("zip")))).start()
         self.send(200, {"ok": True})
 
     def api_stop(self, body):
@@ -503,6 +527,15 @@ class Handler(BaseHTTPRequestHandler):
         with open(os.path.join(folder, out), "w", encoding="utf-8", newline="") as f:
             f.write(fn(papers))
         self.send(200, {"ok": True, "file": out, "folder": folder, "count": len(papers)})
+
+    def api_zip(self, body):
+        lib = library()
+        folder = os.path.abspath(os.path.join(lib.root, str(body.get("path") or "")))
+        if (os.path.commonpath([folder, lib.root]) != lib.root or folder == lib.root
+                or not os.path.isdir(folder)):
+            return self.err(400, "That folder does not exist yet.")
+        name, count = make_zip(folder)
+        self.send(200, {"ok": True, "file": name, "pdfs": count})
 
     def api_settings(self, body):
         if JOB.get("running"):

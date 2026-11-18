@@ -42,12 +42,13 @@ Your browser opens `http://127.0.0.1:8765`. Keep the small terminal window open 
 | **Journal houses** | IEEE Xplore, MDPI, Springer Nature, Taylor & Francis, Elsevier, Wiley/Hindawi, Frontiers, PLOS, SAGE, IOP, ACS, ACM, Oxford UP, Cambridge UP and arXiv. If you select none, every publisher is searched. |
 | More filters | Paper type (article, review, preprint, chapter, thesis), venue (journal or conference), words to exclude, where to search (title, abstract or full text) and minimum citations. |
 | **Sort** | Best match, most cited, newest or oldest. |
-| **Max papers** | 1 to **100** per search. |
+| **How many papers** | No limit (quick buttons for 25 to 1000). Each 100 papers uses one search from the daily OpenAlex budget. |
 
 After a search you can expand any title to read its abstract, untick papers you don't want, and then:
 
 * **Download PDFs.** This saves the open access papers you selected. If one can't be downloaded, OpenShelf can automatically try the next matching paper instead (the "Auto-replace" option).
 * **Save references only.** No PDFs are downloaded. You get the reference files listed below.
+* **Also save as ZIP.** Tick this before downloading to also get a `<folder> - papers.zip` inside the folder, containing every PDF and reference file. You can also make one at any time with **Make ZIP of folder**, or with **ZIP** on the *My collections* page.
 * **Save as.** Saves a single citation format for the papers you selected straight into the topic folder, with no browser Save dialog.
 
 ## Folders and file names

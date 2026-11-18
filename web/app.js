@@ -95,7 +95,7 @@ function folderHint() {
 $("#topic").addEventListener("input", folderHint);
 $("#folderName").addEventListener("input", folderHint);
 $("#topic").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#form").requestSubmit(); } });
-$("#limit").addEventListener("input", e => $("#limitOut").textContent = e.target.value);
+$("#limitQuick").addEventListener("click", e => { const b = e.target.closest("button"); if (b) $("#limit").value = b.dataset.n; });
 $("#yearQuick").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   const n = +b.dataset.y, y = state.cfg?.year || new Date().getFullYear();
@@ -112,7 +112,7 @@ function readForm() {
     doc_types: checks("#docTypes"), venue_types: checks("#venueTypes"),
     language: $("#englishOnly").checked ? "en" : "",
     search_in: $("#searchIn").value, min_citations: $("#minCit").value,
-    sort: $("#sort").value, limit: +$("#limit").value,
+    sort: $("#sort").value, limit: Math.max(1, Math.round(+$("#limit").value || 25)),
   };
 }
 function writeForm(f) {
@@ -126,7 +126,7 @@ function writeForm(f) {
   $$("#pubs button").forEach(b => b.classList.toggle("on", (f.publishers || []).includes(b.dataset.k)));
   $("#englishOnly").checked = f.language !== "";
   $("#searchIn").value = f.search_in || "title_abstract"; $("#minCit").value = f.min_citations || "";
-  $("#sort").value = f.sort || "relevance"; $("#limit").value = f.limit || 25; $("#limitOut").textContent = $("#limit").value;
+  $("#sort").value = f.sort || "relevance"; $("#limit").value = f.limit || 25;
 }
 
 $("#form").addEventListener("submit", async e => {
@@ -150,7 +150,7 @@ $("#form").addEventListener("submit", async e => {
       : `${r.total.toLocaleString()} matching papers in OpenAlex · showing ${r.results.length}`;
     showBudget(r.budget);
     $("#empty").hidden = true; $("#resWrap").hidden = false; $("#actionbar").hidden = false; $("#job").hidden = true;
-    $("#loadMore").hidden = r.results.length < f.limit || r.results.length >= 100;
+    $("#loadMore").hidden = r.results.length < f.limit;
     renderList();
     if (!r.results.length) toast("No papers matched. Try fewer keywords, more years, or more publishers.", true);
   } catch (err) { toast(err.message, true); }
@@ -160,11 +160,11 @@ $("#form").addEventListener("submit", async e => {
 $("#loadMore").onclick = async () => {
   const b = $("#loadMore"); b.disabled = true;
   try {
-    const r = await api("/api/more", { search_id: state.searchId, n: 25 });
+    const r = await api("/api/more", { search_id: state.searchId, n: 50 });
     if (r.note) toast(r.note);
     r.results.forEach(p => { state.results.push(p); if (selectable(p)) state.selected.add(p.id); });
     $("#resMeta").textContent = $("#resMeta").textContent.replace(/showing \d+/, `showing ${state.results.length}`);
-    if (!r.results.length || state.results.length >= 100) b.hidden = true;
+    if (r.results.length < 50) b.hidden = true;
     showBudget(r.budget); renderList();
   } catch (err) { toast(err.message, true); }
   b.disabled = false;
@@ -238,7 +238,8 @@ $("#dlBtn").onclick = async () => {
   const refIds = [...state.selected].filter(i => !ids.includes(i));
   const skipped = refIds.length;
   try {
-    await api("/api/download", { search_id: state.searchId, ids, ref_ids: refIds, fill: $("#fill").checked, topic: state.topic, folder: state.folderName });
+    await api("/api/download", { search_id: state.searchId, ids, ref_ids: refIds, fill: $("#fill").checked, zip: $("#wantZip").checked, topic: state.topic, folder: state.folderName });
+    store.set("zip", $("#wantZip").checked);
     if (skipped) toast(`${skipped} selected paper(s) are subscription-only or already saved — they'll go in the reference list only.`);
     $("#job").hidden = false; $("#manual").hidden = true; $("#openListBtn").hidden = true;
     $("#stopBtn").hidden = false; $("#log").innerHTML = "";
@@ -272,7 +273,7 @@ function poll() {
         if (state.status[p.id] === "failed") state.selected.delete(p.id);
       });
       renderList();
-      $("#stopBtn").hidden = true; $("#openListBtn").hidden = false;
+      $("#stopBtn").hidden = true; $("#openListBtn").hidden = false; $("#zipBtn").hidden = false;
       refreshLibCount(); updateSel();
       toast(j.message);
     }
@@ -285,6 +286,10 @@ const openRel = p => api("/api/open", { path: p }).catch(err => toast(err.messag
 const folderOfTopic = () => state.folder.split(/[\\/]/).pop();
 $("#openFolderBtn").onclick = () => openRel(folderOfTopic());
 $("#openListBtn").onclick = () => openRel(folderOfTopic() + "/Reading list.html");
+const makeZip = folder => api("/api/zip", { path: folder })
+  .then(r => toast(`Saved “${r.file}” (${r.pdfs} PDFs) in the folder.`))
+  .catch(err => toast(err.message, true));
+$("#zipBtn").onclick = () => makeZip(folderOfTopic());
 
 $("#refsBtn").onclick = async () => {
   const ids = [...state.selected];
@@ -338,12 +343,14 @@ async function loadCollections() {
         <div class="muted" style="font-size:12px">Updated ${esc(c.updated)}</div>
         <div class="acts"><button class="ghost" data-open="${esc(c.name)}">Open folder</button>
         ${c.references ? `<button class="ghost" data-open="${esc(c.name)}/Reading list.html">Reading list</button>` : ""}
+        <button class="ghost" data-zip="${esc(c.name)}">ZIP</button>
         <button class="ghost" data-again="${esc(c.name)}">Search again</button></div></div>`).join("")
       : `<p class="muted">No collections yet. Run a search and download papers or save a reference list.</p>`;
   } catch (err) { toast(err.message, true); }
 }
 $("#colGrid").addEventListener("click", e => {
   const o = e.target.closest("[data-open]"); if (o) return openRel(o.dataset.open);
+  const z = e.target.closest("[data-zip]"); if (z) return makeZip(z.dataset.zip).then(loadCollections);
   const a = e.target.closest("[data-again]");
   if (a) { $("#folderName").value = a.dataset.again; folderHint(); $(".tab[data-view=search]").click(); $("#topic").focus(); }
 });
@@ -382,11 +389,11 @@ $("#themeBtn").onclick = () => {
   } catch { return toast("Can't reach OpenShelf. Is the terminal window still open?", true); }
   $("#pubs").innerHTML = state.cfg.publishers.map(p => `<button type="button" data-k="${p.key}">${esc(p.name)}</button>`).join("");
   $("#pubs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) b.classList.toggle("on"); });
-  $("#limit").max = state.cfg.max_papers;
   $("#yearFrom").max = $("#yearTo").max = state.cfg.year + 1;
   const saved = store.get("form");
   if (saved) writeForm(saved); else { $("#yearFrom").value = state.cfg.year - 4; $("#yearTo").value = state.cfg.year; }
   $("#libCount").textContent = `${state.cfg.library_count} paper${state.cfg.library_count === 1 ? "" : "s"}`;
   folderHint();
+  $("#wantZip").checked = store.get("zip", false);
   try { const j = await api("/api/job"); if (j.running) { $("#job").hidden = false; poll(); } } catch { }
 })();
