@@ -108,6 +108,7 @@ function readForm() {
     access: access.get(), oa_status: checks("#oaStatus"),
     publishers: $$("#pubs button.on").map(b => b.dataset.k),
     doc_types: checks("#docTypes"), venue_types: checks("#venueTypes"),
+    language: $("#englishOnly").checked ? "en" : "",
     search_in: $("#searchIn").value, min_citations: $("#minCit").value,
     sort: $("#sort").value, limit: +$("#limit").value,
   };
@@ -120,6 +121,7 @@ function writeForm(f) {
   $("#yearFrom").value = f.year_from || ""; $("#yearTo").value = f.year_to || "";
   setChecks("#oaStatus", f.oa_status); setChecks("#docTypes", f.doc_types); setChecks("#venueTypes", f.venue_types);
   $$("#pubs button").forEach(b => b.classList.toggle("on", (f.publishers || []).includes(b.dataset.k)));
+  $("#englishOnly").checked = f.language !== "";
   $("#searchIn").value = f.search_in || "title_abstract"; $("#minCit").value = f.min_citations || "";
   $("#sort").value = f.sort || "relevance"; $("#limit").value = f.limit || 25; $("#limitOut").textContent = $("#limit").value;
 }
@@ -137,10 +139,14 @@ $("#form").addEventListener("submit", async e => {
     state.folder = r.folder; state.topic = f.topic || f.keywords.join(" ");
     state.selected = new Set(r.results.filter(selectable).map(p => p.id));
     $("#resTitle").textContent = state.topic;
-    $("#resMeta").textContent = `${r.total.toLocaleString()} matching papers in OpenAlex · showing ${r.results.length}`;
+    $("#resMeta").textContent = r.close
+      ? (r.exact_shown
+        ? `${r.exact_shown} papers match every key term, plus the closest matches · showing ${r.results.length}`
+        : `No paper matches every key term, so these are the closest matches, ranked by relevance · showing ${r.results.length}`)
+      : `${r.total.toLocaleString()} matching papers in OpenAlex · showing ${r.results.length}`;
     showBudget(r.budget);
     $("#empty").hidden = true; $("#resWrap").hidden = false; $("#actionbar").hidden = false; $("#job").hidden = true;
-    $("#loadMore").hidden = r.results.length >= r.total || r.results.length >= 100;
+    $("#loadMore").hidden = r.results.length < f.limit || r.results.length >= 100;
     renderList();
     if (!r.results.length) toast("No papers matched. Try fewer keywords, more years, or more publishers.", true);
   } catch (err) { toast(err.message, true); }
@@ -176,6 +182,7 @@ function renderList() {
       `<span class="b ${esc(p.oa_status)}">${p.is_oa ? esc(p.oa_status) + " OA" : "subscription"}</span>`,
       `<span class="b">${esc(TYPE_LABEL[p.type] || p.type)}</span>`,
       p.publisher ? `<span class="b" style="text-transform:none">${esc(p.publisher)}</span>` : "",
+      p.match === "close" ? `<span class="b close">Close match</span>` : "",
       p.in_library ? `<span class="b lib">Already in “${esc(p.in_library.topic)}”</span>` : "",
       p.is_oa && !p.has_pdf_link ? `<span class="b nopdf">No direct PDF link</span>` : "",
     ].join("");

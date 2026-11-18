@@ -130,6 +130,7 @@ def parse_opts(body):
         "venue_types": as_list(body.get("venue_types")),
         "publishers": as_list(body.get("publishers")),
         "quality": body.get("quality") if body.get("quality") in ("core", "high", "top") else "any",
+        "language": "en" if body.get("language") == "en" else "",
         "min_citations": clamp_int(body.get("min_citations"), 0, 10**6, 0),
         "sort": body.get("sort") or "relevance",
         "limit": clamp_int(body.get("limit"), 1, MAX_PAPERS, 25),
@@ -393,6 +394,8 @@ class Handler(BaseHTTPRequestHandler):
             while len(SEARCHES) > 20:
                 SEARCHES.pop(next(iter(SEARCHES)))
         self.send(200, {"search_id": sid, "total": s.total,
+                        "close": s.used_close, "close_total": s.close_total,
+                        "exact_shown": sum(1 for p in found if p.get("match") == "exact"),
                         "results": [public(annotate(p)) for p in found],
                         "budget": Budget.remaining_usd,
                         "folder": os.path.join(library().root, folder_name(opts["topic"] or " ".join(opts["keywords"])))})

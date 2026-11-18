@@ -142,6 +142,7 @@ button.big { width: 100%; padding: 12px; font-size: 15px; }
 .b.green { background: var(--ok-soft); color: var(--ok); }
 .b.hybrid, .b.bronze { background: var(--accent-soft); color: var(--accent); }
 .b.closed { background: var(--soft); color: var(--muted); }
+.b.close { background: var(--soft); color: var(--muted); text-transform: none; border: 1px dashed var(--line); }
 .b.lib { background: var(--dupe-soft); color: var(--dupe); text-transform: none; }
 .b.nopdf { background: var(--warn-soft); color: var(--warn); text-transform: none; }
 .st { font-size: 12px; font-weight: 700; }

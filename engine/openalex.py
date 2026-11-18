@@ -68,6 +68,38 @@ class Budget:
     limit_usd = None
 
 
+# Words that carry no search meaning in a research title.
+STOPWORDS = set("""a an the and or of for in on at to by from with without into onto via its their our
+is are be been being as that this these those using use used toward towards based through within
+between among under over against per vs versus""".split())
+GENERIC = set("""development develop developing developed design designing designed framework frameworks
+approach approaches method methods methodology system systems novel new study studies analysis
+application applications implementation implementing improved improving improvement enhanced enhancing
+efficient effective proposed propose technique techniques investigation evaluation assessment
+model models modelling modeling scheme strategy strategies solution solutions toward work paper
+research review""".split())
+# Common abbreviations -> what papers also write.
+SYNONYMS = {
+    "ml": ['"machine learning"'], "dl": ['"deep learning"'], "ai": ['"artificial intelligence"'],
+    "rl": ['"reinforcement learning"'], "drl": ['"deep reinforcement learning"'],
+    "nlp": ['"natural language processing"'], "llm": ['"large language model"'],
+    "llms": ['"large language model"'], "cnn": ['"convolutional neural network"'],
+    "uav": ["UAV", "UAVs", "drone", "drones", '"unmanned aerial"'],
+    "uavs": ["UAV", "UAVs", "drone", "drones", '"unmanned aerial"'],
+    "drone": ["drone", "drones", "UAV", "UAVs"], "drones": ["drone", "drones", "UAV", "UAVs"],
+    "gnss": ["GNSS", "GPS"], "gps": ["GPS", "GNSS"],
+    "iot": ['"internet of things"'], "ev": ['"electric vehicle"'], "evs": ['"electric vehicle"'],
+    "pv": ["photovoltaic"], "photovoltaic": ["photovoltaic", "PV", "solar"],
+    "interference": ["interference", "jamming"], "jamming": ["jamming", "interference"],
+}
+KNOWN_PHRASES = ["machine learning", "deep learning", "reinforcement learning", "neural network",
+                 "neural networks", "internet of things", "artificial intelligence", "computer vision",
+                 "large language model", "large language models", "digital twin", "edge computing",
+                 "state of charge", "fault detection", "anomaly detection", "path planning",
+                 "renewable energy", "smart grid", "climate change", "electric vehicle",
+                 "electric vehicles", "unmanned aerial vehicle", "unmanned aerial vehicles"]
+
+
 def _clean_term(t):
     # Commas separate filters in OpenAlex URLs and quotes are added by us.
     t = re.sub(r'[,"()]', " ", t or "")
@@ -79,12 +111,47 @@ def _quote(t):
     return f'"{t}"' if " " in t else t
 
 
-def build_query(topic, keywords=(), match="any", exclude=()):
-    topic = _clean_term(topic)
+def topic_groups(topic):
+    """Split a free-text topic into meaningful search groups.
+    'Embedded ML-based GNSS spoofing detection for UAVs' ->
+    [['embedded'], ['ML','"machine learning"'], ['GNSS','GPS'], ['spoofing'], ['detection'], [UAV...]]"""
+    text = topic or ""
+    groups = [[f'"{_clean_term(q)}"'] for q in re.findall(r'"([^"]+)"', text) if _clean_term(q)]
+    text = re.sub(r'"[^"]*"', " ", text)
+    low = " " + re.sub(r"[^\w\s]", " ", text.lower()) + " "
+    for ph in sorted(KNOWN_PHRASES, key=len, reverse=True):
+        if f" {ph} " in low:
+            groups.append([f'"{ph}"'])
+            low = low.replace(f" {ph} ", " ")
+    seen = set()
+    for w in re.findall(r"[\w]+", low):
+        if w in STOPWORDS or w in GENERIC or len(w) < 2 or w.isdigit() or w in seen:
+            continue
+        seen.add(w)
+        orig = re.search(r"\b" + re.escape(w) + r"\b", text, re.I)
+        word = orig.group(0) if orig else w
+        alts = SYNONYMS.get(w)
+        if alts:
+            uniq = {}
+            for x in [word] + alts:
+                uniq.setdefault(x.lower(), x)
+            groups.append(list(uniq.values()))
+        else:
+            groups.append([word])
+    return groups
+
+
+def _group_str(g):
+    return g[0] if len(g) == 1 else "(" + " OR ".join(g) + ")"
+
+
+def build_query(topic, keywords=(), match="any", exclude=(), broad=False):
+    groups = topic_groups(topic)
     kws = [_quote(k) for k in keywords if _clean_term(k)]
     parts = []
-    if topic:
-        parts.append(f"({topic})")
+    if groups:
+        joiner = " OR " if broad else " AND "
+        parts.append("(" + joiner.join(_group_str(g) for g in groups) + ")")
     if kws:
         joiner = " OR " if match == "any" else " AND "
         parts.append("(" + joiner.join(kws) + ")")
@@ -95,12 +162,12 @@ def build_query(topic, keywords=(), match="any", exclude=()):
     return q
 
 
-def build_filters(opts, source_only=None, publisher_ids=None):
+def build_filters(opts, source_only=None, publisher_ids=None, broad=False):
     f = []
     field = {"title": "title.search", "fulltext": "fulltext.search"}.get(
         opts.get("search_in"), "title_and_abstract.search")
     q = build_query(opts.get("topic"), opts.get("keywords") or [],
-                    opts.get("match", "any"), opts.get("exclude") or [])
+                    opts.get("match", "any"), opts.get("exclude") or [], broad=broad)
     if q:
         f.append(f"{field}:{q}")
     y1, y2 = opts.get("year_from"), opts.get("year_to")
@@ -282,19 +349,35 @@ def normalise(work):
 
 
 class Search:
-    """A paged search. Supports several sub-queries (e.g. publishers + arXiv)
-    merged round-robin so each source gets fair representation."""
+    """A paged search.
+
+    Tier 1 ("exact") requires every key term of the topic. If that runs out,
+    tier 2 ("close") matches any of the key terms, ranked by relevance, so a
+    long title-style topic still returns the closest papers instead of nothing.
+    Within a tier, several sub-queries (publishers + arXiv) are merged
+    round-robin so each source gets fair representation."""
 
     def __init__(self, opts, settings):
         self.opts = opts
         self.settings = settings
+        self.sort = SORTS.get(opts.get("sort", "relevance"), SORTS["relevance"])
+        self.tiers = [self._streams(False, self.sort, "exact")]
+        if len(topic_groups(opts.get("topic"))) >= 2:
+            self.tiers.append(self._streams(True, SORTS["relevance"], "close"))
+        self.tier = 0
+        self.total = 0          # exact matches
+        self.close_total = 0    # extra "closest" matches available
+        self.used_close = False
+        self.seen = set()
+
+    def _streams(self, broad, sort, label):
+        opts = self.opts
         keys = [k for k in (opts.get("publishers") or []) if k in PUB_BY_KEY]
         pub_ids = [PUB_BY_KEY[k]["id"] for k in keys if "id" in PUB_BY_KEY[k]]
         sources = [PUB_BY_KEY[k]["source"] for k in keys if "source" in PUB_BY_KEY[k]]
-        self.streams = []
+        out = []
         if pub_ids or not sources:
-            self.streams.append({"filter": build_filters(opts, publisher_ids=pub_ids),
-                                 "cursor": "*", "buf": [], "done": False})
+            out.append(build_filters(opts, publisher_ids=pub_ids, broad=broad))
         for s in sources:
             # Repository copies (arXiv) are typed "preprint" in OpenAlex, and their
             # source is a repository - always allow both for these streams.
@@ -305,21 +388,22 @@ class Search:
             venues = list(opts.get("venue_types") or [])
             if venues and "repository" not in venues:
                 ropts["venue_types"] = venues + ["repository"]
-            self.streams.append({"filter": build_filters(ropts, source_only=s),
-                                 "cursor": "*", "buf": [], "done": False})
-        self.sort = SORTS.get(opts.get("sort", "relevance"), SORTS["relevance"])
-        self.total = 0
-        self.seen = set()
+            out.append(build_filters(ropts, source_only=s, broad=broad))
+        return [{"filter": f, "sort": sort, "label": label, "cursor": "*",
+                 "buf": [], "done": False} for f in out]
 
     def _fill(self, st, per_page):
         if st["done"] or st["buf"]:
             return
         params = {"filter": st["filter"], "per_page": per_page,
-                  "cursor": st["cursor"], "select": SELECT, "sort": self.sort}
+                  "cursor": st["cursor"], "select": SELECT, "sort": st["sort"]}
         data = _get(params, self.settings)
         meta = data.get("meta") or {}
         if st["cursor"] == "*":
-            self.total += meta.get("count") or 0
+            if st["label"] == "exact":
+                self.total += meta.get("count") or 0
+            else:
+                self.close_total += meta.get("count") or 0
         st["cursor"] = meta.get("next_cursor")
         st["buf"] = [normalise(w) for w in data.get("results") or []]
         if not st["cursor"] or not st["buf"]:
@@ -327,11 +411,12 @@ class Search:
 
     def next_batch(self, n, per_page=100):
         out = []
-        while len(out) < n:
-            live = [s for s in self.streams if not (s["done"] and not s["buf"])]
+        while len(out) < n and self.tier < len(self.tiers):
+            streams = self.tiers[self.tier]
+            live = [s for s in streams if not (s["done"] and not s["buf"])]
             if not live:
-                break
-            progressed = False
+                self.tier += 1
+                continue
             for st in live:
                 self._fill(st, per_page)
                 while st["buf"]:
@@ -340,11 +425,11 @@ class Search:
                     if key in self.seen or len(w["title"]) < 8:   # skip untitled junk records
                         continue
                     self.seen.add(key)
+                    w["match"] = st["label"]
+                    if st["label"] == "close":
+                        self.used_close = True
                     out.append(w)
-                    progressed = True
                     break
                 if len(out) >= n:
                     break
-            if not progressed and all(s["done"] and not s["buf"] for s in self.streams):
-                break
         return out
