@@ -350,6 +350,13 @@ $("#settings").addEventListener("close", async () => {
   } catch (err) { toast(err.message, true); }
 });
 
+/* ------------------------------------------------------------ theme */
+$("#themeBtn").onclick = () => {
+  const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try { localStorage.setItem("openshelf.theme", next); } catch { }
+};
+
 /* ------------------------------------------------------------ boot */
 (async function boot() {
   try {

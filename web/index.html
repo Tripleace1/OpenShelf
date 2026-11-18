@@ -5,11 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenShelf</title>
 <link rel="icon" href="/icon.svg">
+<script>
+  // Apply the saved theme before first paint (no flash).
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem("openshelf.theme"); } catch (e) {}
+    if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><img src="/icon.svg" alt=""><div><b>OpenShelf</b><span>Find, download &amp; cite open research</span></div></div>
+  <div class="brand"><img src="/icon.svg" alt=""><div><b>Open<em>Shelf</em></b><span>Find, download &amp; cite open research</span></div></div>
   <nav class="tabs" role="tablist">
     <button class="tab active" data-view="search" role="tab">Search</button>
     <button class="tab" data-view="collections" role="tab">My collections</button>
@@ -17,6 +26,10 @@
   <div class="top-right">
     <span class="pill" id="libCount" title="PDFs in your library">0 papers</span>
     <span class="pill subtle" id="budget" title="OpenAlex daily search budget left" hidden></span>
+    <button class="icon-btn theme-btn" id="themeBtn" title="Switch light / dark mode" aria-label="Switch light or dark mode">
+      <svg class="moon" viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M20.7 14.6A8.5 8.5 0 0 1 9.4 3.3a8.5 8.5 0 1 0 11.3 11.3Z"/></svg>
+      <svg class="sun" viewBox="0 0 24 24" width="19" height="19"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></g></svg>
+    </button>
     <button class="icon-btn" id="openSettings" title="Settings" aria-label="Settings">
       <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1L15 3.5h-4L10.6 6a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" transform="translate(-1 0)"/></svg>
     </button>
@@ -37,7 +50,7 @@
 
     <div class="field">
       <label for="topic">Topic <small>becomes the folder name</small></label>
-      <input id="topic" placeholder="e.g. UAV navigation in GNSS-denied environments" required>
+      <input id="topic" placeholder="e.g. UAV navigation in GNSS-denied environments">
       <div class="hint" id="folderHint">Saved in <code>Papers/…</code></div>
     </div>
 
@@ -147,7 +160,7 @@
   <section class="panel results" id="results">
     <div class="empty" id="empty">
       <img src="/icon.svg" alt="" width="64">
-      <h2>Build a reading list in minutes</h2>
+      <h2>Build a reading list <span>in minutes</span></h2>
       <ol>
         <li>Type a <b>topic</b> — it becomes the folder name.</li>
         <li>Add <b>keywords</b>, years, access type and journal houses.</li>

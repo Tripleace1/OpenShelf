@@ -252,7 +252,7 @@ def normalise(work):
     pages = bib.get("first_page") or ""
     if bib.get("last_page") and bib.get("last_page") != pages:
         pages = f"{pages}-{bib['last_page']}"
-    title = re.sub(r"<[^>]+>", "", work.get("display_name") or "Untitled").strip()
+    title = re.sub(r"<[^>]+>", "", work.get("display_name") or "").strip()
     return {
         "id": (work.get("id") or "").split("/")[-1],
         "doi": doi,
@@ -296,7 +296,16 @@ class Search:
             self.streams.append({"filter": build_filters(opts, publisher_ids=pub_ids),
                                  "cursor": "*", "buf": [], "done": False})
         for s in sources:
-            self.streams.append({"filter": build_filters(opts, source_only=s),
+            # Repository copies (arXiv) are typed "preprint" in OpenAlex, and their
+            # source is a repository - always allow both for these streams.
+            ropts = dict(opts)
+            types = list(opts.get("doc_types") or [])
+            if types and "preprint" not in types:
+                ropts["doc_types"] = types + ["preprint"]
+            venues = list(opts.get("venue_types") or [])
+            if venues and "repository" not in venues:
+                ropts["venue_types"] = venues + ["repository"]
+            self.streams.append({"filter": build_filters(ropts, source_only=s),
                                  "cursor": "*", "buf": [], "done": False})
         self.sort = SORTS.get(opts.get("sort", "relevance"), SORTS["relevance"])
         self.total = 0
@@ -328,7 +337,7 @@ class Search:
                 while st["buf"]:
                     w = st["buf"].pop(0)
                     key = w["doi"].lower() or w["id"]
-                    if key in self.seen:
+                    if key in self.seen or len(w["title"]) < 8:   # skip untitled junk records
                         continue
                     self.seen.add(key)
                     out.append(w)
