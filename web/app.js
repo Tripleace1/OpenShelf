@@ -256,6 +256,11 @@ function poll() {
     renderList();
     if (j.finished || !j.running) {
       clearInterval(state.polling); state.polling = null;
+      state.results.forEach(p => {
+        if (state.status[p.id] === "saved") { p.in_library = { topic: state.topic }; state.selected.delete(p.id); }
+        if (state.status[p.id] === "failed") state.selected.delete(p.id);
+      });
+      renderList();
       $("#stopBtn").hidden = true; $("#openListBtn").hidden = false;
       refreshLibCount(); updateSel();
       toast(j.message);
