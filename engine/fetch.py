@@ -20,6 +20,8 @@ import urllib.parse
 import urllib.request
 from html import unescape
 
+from . import harvest
+
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/130.0 Safari/537.36")
 MIN_PDF_BYTES = 15_000
@@ -127,7 +129,10 @@ def download(paper, settings, should_stop=lambda: False):
             if url in tried or should_stop():
                 continue
             tried.add(url)
-            data, why = fetch_pdf(url)
+            data = harvest.fetch(url)          # PaperHarvest's downloader first
+            if data:
+                return data, url, "ok"
+            data, why = fetch_pdf(url)         # then OpenShelf's (follows citation_pdf_url)
             if data:
                 return data, url, "ok"
             reason = why

@@ -31,10 +31,10 @@ if sys.version_info < (3, 8):
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from engine import fetch, refs                                 # noqa: E402
+from engine import fetch, harvest, refs                                 # noqa: E402
 from engine.library import Library, NAMING, make_filename, folder_name  # noqa: E402
 from engine.openalex import (PUBLISHERS, OA_STATUSES, Budget, Search,  # noqa: E402
-                             SearchError)
+                             SearchError, normalise)
 
 VERSION = "1.0"
 MAX_PAPERS = 10000          # safety ceiling only; there is no practical cap
@@ -377,7 +377,8 @@ class Handler(BaseHTTPRequestHandler):
                 "version": VERSION, "max_papers": MAX_PAPERS,
                 "publishers": [{"key": p["key"], "name": p["name"]} for p in PUBLISHERS],
                 "naming": NAMING, "settings": {**SETTINGS, "papers_dir": lib.root},
-                "library_count": lib.count(), "year": dt.date.today().year})
+                "library_count": lib.count(), "year": dt.date.today().year,
+                "paperharvest": harvest.available(), "paperharvest_error": harvest.error})
         if url.path == "/api/collections":
             return self.send(200, {"root": library().root,
                                    "collections": library().collections()})
@@ -433,6 +434,25 @@ class Handler(BaseHTTPRequestHandler):
             return self.err(400, "Please enter a topic or at least one keyword.")
         s = Search(opts, SETTINGS)
         found = s.next_batch(opts["limit"])
+        backup = False
+        if not found and harvest.available() and opts["access"] == "oa":
+            # Nothing from OpenShelf's search: fall back to PaperHarvest's original one.
+            year = opts["year_from"] or dt.date.today().year - 5
+            peer_only = "preprint" not in opts["doc_types"]
+            raw = harvest.search(opts["topic"] or " ".join(opts["keywords"]), year, peer_only,
+                                 pages=max(1, min(5, opts["limit"] // 50 + 1)))
+            seen = set()
+            for w in raw:
+                p = normalise(w)
+                key = p["doi"].lower() or p["id"]
+                if key in seen or len(p["title"]) < 8:
+                    continue
+                seen.add(key)
+                p["match"] = "close"
+                found.append(p)
+                if len(found) >= opts["limit"]:
+                    break
+            backup = bool(found)
         sid = uuid.uuid4().hex[:12]
         with STATE_LOCK:
             SEARCHES[sid] = {"search": s, "opts": opts,
@@ -440,7 +460,8 @@ class Handler(BaseHTTPRequestHandler):
             while len(SEARCHES) > 20:
                 SEARCHES.pop(next(iter(SEARCHES)))
         self.send(200, {"search_id": sid, "total": s.total,
-                        "close": s.used_close, "close_total": s.close_total,
+                        "close": s.used_close or backup, "close_total": s.close_total,
+                        "engine": "PaperHarvest" if backup else "OpenShelf",
                         "exact_shown": sum(1 for p in found if p.get("match") == "exact"),
                         "results": [public(annotate(p)) for p in found],
                         "budget": Budget.remaining_usd,
@@ -582,6 +603,8 @@ def main():
     print("=" * 60)
     print(f"  OpenShelf {VERSION} is running at  {url}")
     print(f"  Papers are saved in  {library().root}")
+    print("  Engine: PaperHarvest by Saka Adetayo Muhammed" +
+          ("" if harvest.available() else f"  (NOT LOADED: {harvest.error})"))
     print("  Keep this window open while you use it. Ctrl+C to quit.")
     print("=" * 60)
     if not os.environ.get("OPENSHELF_NO_BROWSER"):

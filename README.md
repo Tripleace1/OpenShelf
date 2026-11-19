@@ -97,4 +97,11 @@ Without a key, OpenAlex gives each internet connection a small shared daily budg
 
 ## Credits
 
-OpenShelf is a rebuild of [PaperHarvest](https://github.com/Adetayo224/PaperHarvest) by Saka Adetayo Muhammed (Samfred Robotics), released under the MIT licence.
+OpenShelf is built on [PaperHarvest](https://github.com/Adetayo224/PaperHarvest) by **Saka Adetayo Muhammed** (Samfred Robotics), used with his permission under the MIT licence.
+
+His original source is included unchanged in the `PaperHarvest/` folder, and OpenShelf runs on it directly (see `engine/harvest.py`):
+
+* **His PDF-link finder (`pdf_links`) and downloader (`fetch_pdf`)** are tried first for every paper.
+* **His original OpenAlex search** is the backup whenever OpenShelf's search returns nothing.
+
+To update the engine, replace `PaperHarvest/paperharvest.py` with his latest version.

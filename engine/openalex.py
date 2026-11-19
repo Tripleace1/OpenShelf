@@ -12,6 +12,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from . import harvest
+
 API = "https://api.openalex.org/works"
 UA = "OpenShelf/1.0 (local research paper finder; +https://openalex.org)"
 
@@ -299,7 +301,8 @@ def normalise(work):
     oa = work.get("open_access") or {}
     bib = work.get("biblio") or {}
     ids = work.get("ids") or {}
-    pdfs = []
+    # PaperHarvest's own link finder goes first, then OpenShelf's extra links.
+    pdfs = list(dict.fromkeys(harvest.pdf_links(work)))
     for loc in [work.get("best_oa_location"), prim] + (work.get("locations") or []):
         u = (loc or {}).get("pdf_url")
         if u and u not in pdfs:
