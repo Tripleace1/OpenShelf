@@ -48,7 +48,7 @@ After a search you can expand any title to read its abstract, untick papers you 
 
 * **Download PDFs.** This saves the open access papers you selected. If one can't be downloaded, OpenShelf can automatically try the next matching paper instead (the "Auto-replace" option).
 * **Save references only.** No PDFs are downloaded. You get the reference files listed below.
-* **Also save as ZIP.** Tick this before downloading to also get a `<folder> - papers.zip` inside the folder, containing every PDF and reference file. You can also make one at any time with **Make ZIP of folder**, or with **ZIP** on the *My collections* page.
+* **Save PDFs as.** Choose **Separate PDF files**, **One ZIP file only** (each PDF goes straight into `<folder> - papers.zip` with no loose PDFs, and the reference files are added to it too), or **PDF files + a ZIP**. You can make a ZIP of any folder later with **Make ZIP of folder**, or with **ZIP** on the *My collections* page. Papers inside a ZIP still count for duplicate checking.
 * **Save as.** Saves a single citation format for the papers you selected straight into the topic folder, with no browser Save dialog.
 
 ## Folders and file names

@@ -183,12 +183,17 @@ def prepare_folder(label, title):
     return folder
 
 
+def zip_name(folder):
+    return os.path.basename(os.path.normpath(folder)) + " - papers.zip"
+
+
 def make_zip(folder):
-    """Bundle the folder's PDFs and reference files into one ZIP inside the folder."""
-    name = os.path.basename(os.path.normpath(folder)) + " - papers.zip"
+    """Bundle the folder's PDFs and reference files into one ZIP inside the folder.
+    PDFs already stored only inside the ZIP are kept."""
+    name = zip_name(folder)
     path = os.path.join(folder, name)
     tmp = path + ".tmp"
-    count = 0
+    written = set()
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for f in sorted(os.listdir(folder)):
             full = os.path.join(folder, f)
@@ -196,13 +201,22 @@ def make_zip(folder):
                     or f == "references.json"):
                 continue
             z.write(full, f)
-            count += f.lower().endswith(".pdf")
+            written.add(f)
+        if os.path.isfile(path):                   # carry over ZIP-only papers
+            try:
+                with zipfile.ZipFile(path) as old:
+                    for m in old.namelist():
+                        if m not in written:
+                            z.writestr(old.getinfo(m), old.read(m))
+                            written.add(m)
+            except zipfile.BadZipFile:
+                pass
     os.replace(tmp, path)
-    return name, count
+    return name, sum(1 for m in written if m.lower().endswith(".pdf"))
 
 
 # ------------------------------------------------------------------ download job
-def run_download(search_id, ids, fill, topic, ref_ids=(), title="", want_zip=False):
+def run_download(search_id, ids, fill, topic, ref_ids=(), title="", output="files"):
     lib = library()
     entry = SEARCHES.get(search_id)
     folder = prepare_folder(topic, title)
@@ -211,6 +225,7 @@ def run_download(search_id, ids, fill, topic, ref_ids=(), title="", want_zip=Fal
     target = len(queue)
     q_lock, done_papers = threading.Lock(), []
     budget = {"extra": max(target * 4, 20)}
+    zpath = os.path.join(folder, zip_name(folder))
 
     with STATE_LOCK:
         reset_job()
@@ -272,17 +287,34 @@ def run_download(search_id, ids, fill, topic, ref_ids=(), title="", want_zip=Fal
                         queue.insert(0, p)
                         set_status(p["id"], "")
                         return
-                    num = lib.next_number(folder) if naming == "numbered" else 1
-                    path = lib.unique_path(folder, make_filename(p, naming, num))
-                    with open(path, "wb") as f:
-                        f.write(data)
-                    lib.add(p, path, topic)
+                    if output == "zip":
+                        # Straight into the ZIP: no loose PDF in the folder.
+                        names = lib.zip_names(zpath)
+                        num = 1 + max([int(m[:3]) for m in names if m[:3].isdigit()] or [0])
+                        member = make_filename(p, naming, num)
+                        base, ext = os.path.splitext(member)
+                        i = 2
+                        while member in names:
+                            member = f"{base} ({i}){ext}"
+                            i += 1
+                        with zipfile.ZipFile(zpath, "a", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+                            z.writestr(member, data)
+                        lib.add(p, zpath, topic, member=member)
+                        shown = f"{member}  (in {zip_name(folder)})"
+                        rec["file"] = f"{zip_name(folder)}::{member}"
+                    else:
+                        num = lib.next_number(folder) if naming == "numbered" else 1
+                        path = lib.unique_path(folder, make_filename(p, naming, num))
+                        with open(path, "wb") as f:
+                            f.write(data)
+                        lib.add(p, path, topic)
+                        shown = os.path.basename(path)
+                        rec["file"] = shown
                     with STATE_LOCK:
                         JOB["saved"] += 1
-                rec["file"] = os.path.basename(path)
                 set_status(p["id"], "saved")
                 host = urllib.parse.urlparse(src).netloc
-                log(f"Saved: {os.path.basename(path)}  ({host})", "ok")
+                log(f"Saved: {shown}  ({host})", "ok")
             else:
                 set_status(p["id"], "failed")
                 with STATE_LOCK:
@@ -309,7 +341,7 @@ def run_download(search_id, ids, fill, topic, ref_ids=(), title="", want_zip=Fal
         if done_papers:
             refs.merge_and_write(folder, title or topic, done_papers)
             log("Reference list updated (BibTeX, RIS, CSV, APA, IEEE, Reading list.html).")
-        if want_zip and not JOB["stop"]:
+        if output in ("zip", "both") and (output == "zip" or not JOB["stop"]):
             zname, zcount = make_zip(folder)
             with STATE_LOCK:
                 JOB["zip"] = zname
@@ -507,7 +539,9 @@ class Handler(BaseHTTPRequestHandler):
                          args=(body["search_id"], ids, bool(body.get("fill", True)),
                                self._topic(entry, body),
                                [i for i in body.get("ref_ids") or [] if i in entry["papers"]][:MAX_PAPERS],
-                               self._title(entry), bool(body.get("zip")))).start()
+                               self._title(entry),
+                               body.get("output") if body.get("output") in ("files", "zip", "both")
+                               else ("both" if body.get("zip") else "files"))).start()
         self.send(200, {"ok": True})
 
     def api_stop(self, body):

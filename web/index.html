@@ -222,7 +222,12 @@
     <div class="actionbar" id="actionbar" hidden>
       <div class="sel-info"><b id="selCount">0</b> selected</div>
       <label class="check pdf-only" title="If a paper can't be downloaded, try the next matching result instead"><input type="checkbox" id="fill" checked> Auto-replace failed downloads</label>
-      <label class="check pdf-only" title="After downloading, also bundle the PDFs and reference files into one ZIP inside the folder"><input type="checkbox" id="wantZip"> Also save as ZIP</label>
+      <label class="check pdf-only out-pick" title="How the downloaded PDFs are stored in the topic folder">Save PDFs as
+        <select id="pdfOutput">
+          <option value="files">Separate PDF files</option>
+          <option value="zip">One ZIP file only</option>
+          <option value="both">PDF files + a ZIP</option>
+        </select></label>
       <div class="spacer"></div>
       <div class="dropdown">
         <button class="ghost" type="button" id="exportBtn" title="Save one citation format into the topic folder">Save as ▾</button>

@@ -237,3 +237,4 @@ button.big { background: linear-gradient(100deg, var(--accent), var(--navy)); bo
 }
 
 textarea { resize: vertical; min-height: 44px; line-height: 1.4; font-family: inherit; }
+.out-pick select { width: auto; padding: 4px 8px; margin-left: 4px; font-size: 13px; }

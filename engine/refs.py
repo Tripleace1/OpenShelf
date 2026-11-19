@@ -191,7 +191,10 @@ def to_html(topic, papers):
     rows = []
     for i, p in enumerate(papers, 1):
         links = []
-        if p.get("file"):
+        if p.get("file") and "::" in p["file"]:
+            zip_name = p["file"].split("::")[0].replace("\\", "/").split("/")[-1]
+            links.append("<span>In " + html.escape(zip_name) + "</span>")
+        elif p.get("file"):
             href = "/".join(urllib.parse.quote(part) for part in re.split(r"[\\/]", p["file"]))
             links.append(f'<a href="{html.escape(href)}">Open PDF</a>')
         if p.get("landing_url"):

@@ -247,8 +247,8 @@ $("#dlBtn").onclick = async () => {
   const refIds = [...state.selected].filter(i => !ids.includes(i));
   const skipped = refIds.length;
   try {
-    await api("/api/download", { search_id: state.searchId, ids, ref_ids: refIds, fill: $("#fill").checked, zip: $("#wantZip").checked, topic: state.topic, folder: state.folderName });
-    store.set("zip", $("#wantZip").checked);
+    await api("/api/download", { search_id: state.searchId, ids, ref_ids: refIds, fill: $("#fill").checked, output: $("#pdfOutput").value, topic: state.topic, folder: state.folderName });
+    store.set("output", $("#pdfOutput").value);
     if (skipped) toast(`${skipped} selected paper(s) are subscription-only or already saved — they'll go in the reference list only.`);
     $("#job").hidden = false; $("#manual").hidden = true; $("#openListBtn").hidden = true;
     $("#stopBtn").hidden = false; $("#log").innerHTML = "";
@@ -403,6 +403,6 @@ $("#themeBtn").onclick = () => {
   if (saved) writeForm(saved); else { $("#yearFrom").value = state.cfg.year - 4; $("#yearTo").value = state.cfg.year; }
   $("#libCount").textContent = `${state.cfg.library_count} paper${state.cfg.library_count === 1 ? "" : "s"}`;
   folderHint();
-  $("#wantZip").checked = store.get("zip", false);
+  $("#pdfOutput").value = store.get("output", store.get("zip", false) ? "both" : "files");
   try { const j = await api("/api/job"); if (j.running) { $("#job").hidden = false; poll(); } } catch { }
 })();

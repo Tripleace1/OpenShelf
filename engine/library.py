@@ -12,6 +12,7 @@ import os
 import re
 import threading
 import unicodedata
+import zipfile
 
 LIB_FILE = ".openshelf-library.json"
 _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
@@ -117,17 +118,44 @@ class Library:
         return keys
 
     # ------------------------------------------------------------ queries
+    # A saved paper is either a PDF file ("Topic/x.pdf") or a member of a ZIP
+    # ("Topic/Topic - papers.zip::x.pdf").
+    _zip_cache = {}
+
+    @classmethod
+    def zip_names(cls, path):
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return set()
+        hit = cls._zip_cache.get(path)
+        if hit and hit[0] == mtime:
+            return hit[1]
+        try:
+            with zipfile.ZipFile(path) as z:
+                names = set(z.namelist())
+        except (OSError, zipfile.BadZipFile):
+            names = set()
+        cls._zip_cache[path] = (mtime, names)
+        return names
+
+    def exists(self, rel):
+        if "::" in rel:
+            zrel, member = rel.split("::", 1)
+            return member in self.zip_names(os.path.join(self.root, zrel))
+        return os.path.isfile(os.path.join(self.root, rel))
+
     def find(self, paper):
-        """Return the library entry if this paper is already saved on disk."""
+        """Return the library entry if this paper is already saved (as a PDF or in a ZIP)."""
         with self.lock:
             for k in self.keys_for(paper):
                 e = self.data["papers"].get(k)
-                if e and os.path.isfile(os.path.join(self.root, e["file"])):
+                if e and self.exists(e["file"]):
                     return e
         return None
 
-    def add(self, paper, abs_file, topic):
-        rel = os.path.relpath(abs_file, self.root)
+    def add(self, paper, abs_file, topic, member=None):
+        rel = os.path.relpath(abs_file, self.root) + (f"::{member}" if member else "")
         entry = {"title": paper.get("title"), "doi": paper.get("doi"),
                  "id": paper.get("id"), "file": rel, "topic": topic,
                  "added": dt.datetime.now().isoformat(timespec="seconds")}
@@ -172,6 +200,9 @@ class Library:
                 continue
             files = os.listdir(d)
             pdfs = [f for f in files if f.lower().endswith(".pdf")]
+            for z in (f for f in files if f.lower().endswith(".zip")):
+                pdfs += [m for m in self.zip_names(os.path.join(d, z))
+                         if m.lower().endswith(".pdf") and m not in pdfs]
             refs = 0
             meta = os.path.join(d, "references.json")
             if os.path.isfile(meta):
@@ -190,4 +221,4 @@ class Library:
     def count(self):
         with self.lock:
             files = {e["file"] for e in self.data["papers"].values()}
-        return sum(1 for f in files if os.path.isfile(os.path.join(self.root, f)))
+        return sum(1 for f in files if self.exists(f))
