@@ -136,6 +136,13 @@ $("#form").addEventListener("submit", async e => {
   if (!f.doc_types.length) return toast("Pick at least one paper type under More filters.", true);
   store.set("form", f);
   const go = $("#go"); go.disabled = true; go.lastChild.textContent = " Searching…";
+  // If OpenAlex asks us to wait, show a countdown while the server retries by itself.
+  const busyTimer = setInterval(async () => {
+    try {
+      const b = await api("/api/busy");
+      go.lastChild.textContent = b.wait ? ` OpenAlex is busy, retrying in ${b.wait}s…` : " Searching…";
+    } catch { }
+  }, 1500);
   try {
     const r = await api("/api/search", f);
     state.searchId = r.search_id; state.results = r.results; state.status = {};
@@ -149,12 +156,14 @@ $("#form").addEventListener("submit", async e => {
         : `No paper matches every key term, so these are the closest matches, ranked by relevance · showing ${r.results.length}`)
       : `${r.total.toLocaleString()} matching papers in OpenAlex · showing ${r.results.length}`;
     showBudget(r.budget);
+    if (r.key_status === "not_activated") toast("Your OpenAlex API key isn't active yet. Click the link in the email “Activate your OpenAlex API key”. Searching without it for now.");
+    else if (r.key_status === "invalid") toast("OpenAlex didn't accept the API key in Settings, so searching without it. Check the key.", true);
     $("#empty").hidden = true; $("#resWrap").hidden = false; $("#actionbar").hidden = false; $("#job").hidden = true;
     $("#loadMore").hidden = r.results.length < f.limit;
     renderList();
     if (!r.results.length) toast("No papers matched. Try fewer keywords, more years, or more publishers.", true);
   } catch (err) { toast(err.message, true); }
-  finally { go.disabled = false; go.lastChild.textContent = " Find papers"; }
+  finally { clearInterval(busyTimer); go.disabled = false; go.lastChild.textContent = " Find papers"; }
 });
 
 $("#loadMore").onclick = async () => {

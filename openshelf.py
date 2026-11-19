@@ -379,6 +379,9 @@ class Handler(BaseHTTPRequestHandler):
                 "naming": NAMING, "settings": {**SETTINGS, "papers_dir": lib.root},
                 "library_count": lib.count(), "year": dt.date.today().year,
                 "paperharvest": harvest.available(), "paperharvest_error": harvest.error})
+        if url.path == "/api/busy":
+            left = max(0, round(Budget.busy_until - time.time()))
+            return self.send(200, {"wait": left})
         if url.path == "/api/collections":
             return self.send(200, {"root": library().root,
                                    "collections": library().collections()})
@@ -387,6 +390,7 @@ class Handler(BaseHTTPRequestHandler):
                 snap = json.loads(json.dumps(JOB))
                 JOB.pop("added", None)
             snap["budget"] = Budget.remaining_usd
+            snap["key_status"] = Budget.key_status
             return self.send(200, snap)
         if url.path == "/api/export":
             sid = (qs.get("search_id") or [""])[0]
@@ -464,7 +468,7 @@ class Handler(BaseHTTPRequestHandler):
                         "engine": "PaperHarvest" if backup else "OpenShelf",
                         "exact_shown": sum(1 for p in found if p.get("match") == "exact"),
                         "results": [public(annotate(p)) for p in found],
-                        "budget": Budget.remaining_usd,
+                        "budget": Budget.remaining_usd, "key_status": Budget.key_status,
                         "folder": os.path.join(library().root, folder_name(
                             opts["folder"] or opts["topic"] or " ".join(opts["keywords"])))})
 

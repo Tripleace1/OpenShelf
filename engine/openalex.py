@@ -68,6 +68,8 @@ class Budget:
     """Tracks the OpenAlex daily budget reported in response headers."""
     remaining_usd = None
     limit_usd = None
+    busy_until = 0.0        # when OpenAlex asked us to wait, the time the wait ends
+    key_status = ""         # "", "ok", "not_activated" or "invalid"
 
 
 # Words that carry no search meaning in a research title.
@@ -218,13 +220,32 @@ def build_filters(opts, source_only=None, publisher_ids=None, broad=False):
 
 
 def _get(params, settings):
+    try:
+        data = _get_once(dict(params), settings)
+        if settings.get("api_key"):
+            Budget.key_status = "ok"
+        return data
+    except KeyRefused as e:
+        # Key not activated yet (or wrong): search without it instead of failing.
+        Budget.key_status = e.status
+        return _get_once(dict(params), {**settings, "api_key": ""})
+
+
+class KeyRefused(Exception):
+    def __init__(self, status):
+        super().__init__(status)
+        self.status = status
+
+
+def _get_once(params, settings):
     if settings.get("api_key"):
         params["api_key"] = settings["api_key"]
     if settings.get("email"):
         params["mailto"] = settings["email"]
     url = API + "?" + urllib.parse.urlencode(params, safe=":|,<>*")
     last = None
-    for attempt in range(3):
+    waited = 0.0
+    for attempt in range(5):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA,
                                                        "Accept": "application/json"})
@@ -244,15 +265,21 @@ def _get(params, settings):
                     wait = float(e.headers.get("Retry-After") or 0)
                 except ValueError:
                     wait = 0
-                if 0 < wait <= 30 and attempt < 2:
-                    time.sleep(wait + 0.5)       # temporary busy period: wait and retry
-                    continue
                 msg = ""
                 try:
                     msg = json.loads(body).get("message") or ""
                 except Exception:
                     pass
-                if wait and wait <= 120:
+                over_budget = "budget" in msg.lower() or wait > 300
+                # Temporary busy period: wait and retry by ourselves (up to ~2 minutes).
+                if not over_budget and 0 < wait <= 90 and waited + wait <= 120 and attempt < 4:
+                    Budget.busy_until = time.time() + wait + 1
+                    time.sleep(wait + 1)
+                    waited += wait + 1
+                    Budget.busy_until = 0.0
+                    continue
+                Budget.busy_until = 0.0
+                if not over_budget and wait:
                     raise SearchError(f"OpenAlex is busy right now ({msg or 'rate limited'}). "
                                       "Wait a few seconds and search again, or add a free "
                                       "API key in Settings (gear icon).")
@@ -260,6 +287,9 @@ def _get(params, settings):
                     "The free daily OpenAlex search budget for your network is used up. "
                     "Add a free OpenAlex API key in Settings (gear icon) to get your own "
                     "budget, or try again tomorrow.")
+            if e.code in (401, 403) and settings.get("api_key"):
+                raise KeyRefused("not_activated" if "not_activated" in body or "activated" in body
+                                 else "invalid")
             if e.code in (400, 403):
                 msg = body
                 try:
