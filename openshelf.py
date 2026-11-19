@@ -28,7 +28,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 if sys.version_info < (3, 8):
     sys.exit("OpenShelf needs Python 3.8 or newer. Get it from https://www.python.org/downloads/")
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# When packaged as OpenShelf.exe (PyInstaller), the app files are unpacked to a
+# temporary folder (sys._MEIPASS), so settings and papers live in
+# Documents\OpenShelf instead. When run from source, everything stays here.
+FROZEN = getattr(sys, "frozen", False)
+HERE = getattr(sys, "_MEIPASS", "") if FROZEN else os.path.dirname(os.path.abspath(__file__))
+DATA = os.path.join(os.path.expanduser("~"), "Documents", "OpenShelf") if FROZEN else HERE
+os.makedirs(DATA, exist_ok=True)
 sys.path.insert(0, HERE)
 
 from engine import fetch, harvest, refs                                 # noqa: E402
@@ -39,9 +45,9 @@ from engine.openalex import (PUBLISHERS, OA_STATUSES, Budget, Search,  # noqa: E
 VERSION = "1.0"
 MAX_PAPERS = 10000          # safety ceiling only; there is no practical cap
 WEB = os.path.join(HERE, "web")
-SETTINGS_FILE = os.path.join(HERE, "settings.json")
+SETTINGS_FILE = os.path.join(DATA, "settings.json")
 DEFAULT_SETTINGS = {
-    "papers_dir": os.path.join(HERE, "Papers"),
+    "papers_dir": os.path.join(DATA, "Papers"),
     "naming": "year_author_title",
     "api_key": "",
     "email": "",
@@ -654,4 +660,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit as e:
+        if FROZEN and e.code not in (0, None):
+            print(e.code)
+            input("\nPress Enter to close...")
+        raise
+    except Exception as e:                      # keep the window open so the error can be read
+        print(f"\nOpenShelf stopped because of an error: {type(e).__name__}: {e}")
+        if FROZEN:
+            input("\nPress Enter to close...")
+        raise

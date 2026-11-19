@@ -11,7 +11,17 @@ Type a topic, add keywords, pick the years, the access type and the journal hous
 
 ---
 
-## Quick start
+## Easiest: download the Windows app (no Python, no command line)
+
+1. Download **`OpenShelf.exe`** from the [Releases page](../../releases/latest).
+2. Double-click it. A small black window opens, then OpenShelf opens in your browser.
+3. Keep the black window open while you use it, and close it when you're done.
+
+The first time, Windows may show **"Windows protected your PC"**, because the app isn't signed with a paid certificate. Click **More info → Run anyway**.
+
+When you use the app, your papers and settings are saved in **`Documents\OpenShelf`**.
+
+## Quick start (run from the source code)
 
 1. Install **Python 3.8+** from [python.org/downloads](https://www.python.org/downloads/). On Windows, tick **"Add Python to PATH"** during setup.
 2. Get OpenShelf: `git clone <this repo>`, or click **Code → Download ZIP** and unzip it.
@@ -94,6 +104,15 @@ Without a key, OpenAlex gives each internet connection a small shared daily budg
 * **Browser didn't open**: go to `http://127.0.0.1:8765` yourself.
 * **Few results**: use fewer or broader keywords, choose *Match any*, widen the years, or select more publishers.
 * **Different port**: set `OPENSHELF_PORT=8800` before starting.
+
+## Building the Windows app (for maintainers)
+
+```bat
+py -3 -m pip install pyinstaller pillow
+py -3 packaging\build_windows.py
+```
+
+This creates `dist\OpenShelf.exe`. The web interface and the PaperHarvest engine are bundled inside it. Upload the file to a new **GitHub Release** (repo page → *Releases* → *Draft a new release* → attach the file) so people can download it.
 
 ## Credits
 
